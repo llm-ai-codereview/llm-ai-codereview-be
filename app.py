@@ -2,6 +2,11 @@ import os
 import boto3
 from github import Github
 import json
+# from dotenv import load_dotenv
+from flask import Flask
+app = Flask(__name__)
+
+# load_dotenv()
 
 # AWS 및 GitHub 설정
 AWS_ACCESS_KEY = os.getenv('AWS_ACCESS_KEY')
@@ -114,6 +119,9 @@ def post_review_comment(repo_name, pr_number, review_comment):
         commit=commit
         )
 
+    return None
+
+@app.route('/review/<path:repo_name>/<int:pr_number>')
 def main(repo_name, pr_number):
     diff_text = get_pr_diff(repo_name, pr_number)
     review_comment = generate_review(diff_text)
@@ -130,9 +138,10 @@ def main(repo_name, pr_number):
 
         else:
             print("문자열을 찾을 수 없습니다.")
+    return ''
 
-if __name__ == "__main__":
-    repo_name = "llm-ai-codereview/react-sample"
-    #TODO pr hook에서 넘겨줘야 할듯..?
-    pr_number = 1
-    main(repo_name, pr_number)
+# if __name__ == "__main__":
+#     repo_name = "llm-ai-codereview/react-sample"
+#     #TODO pr hook에서 넘겨줘야 할듯..?
+#     pr_number = 1
+#     main(repo_name, pr_number)
