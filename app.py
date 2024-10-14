@@ -2,11 +2,11 @@ import os
 import boto3
 from github import Github
 import json
-# from dotenv import load_dotenv
-from flask import Flask
+from dotenv import load_dotenv
+from flask import Flask, jsonify
 app = Flask(__name__)
 
-# load_dotenv()
+load_dotenv()
 
 # AWS 및 GitHub 설정
 AWS_ACCESS_KEY = os.getenv('AWS_ACCESS_KEY')
@@ -138,7 +138,7 @@ def main(repo_name, pr_number):
 
         else:
             print("문자열을 찾을 수 없습니다.")
-    return ''
+    return jsonify({"message": "Success"})
 
 # if __name__ == "__main__":
 #     repo_name = "llm-ai-codereview/react-sample"
