@@ -3,7 +3,7 @@ import boto3
 from github import Github
 import json
 from dotenv import load_dotenv
-from flask import Flask, jsonify
+from flask import request, Flask, jsonify
 app = Flask(__name__)
 
 load_dotenv()
@@ -121,8 +121,12 @@ def post_review_comment(repo_name, pr_number, review_comment):
 
     return None
 
-@app.route('/review/<path:repo_name>/<int:pr_number>')
-def main(repo_name, pr_number):
+@app.route('/review', methods=['POST'])
+def main():
+    params = request.get_json()
+    repo_name = params['repo_name']
+    pr_number = params['pr_number']
+
     diff_text = get_pr_diff(repo_name, pr_number)
     review_comment = generate_review(diff_text)
     if review_comment:

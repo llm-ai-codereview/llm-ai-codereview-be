@@ -13,4 +13,10 @@ export GITHUB_TOKEN='your_github_token'
 ```
 
 ---API 호출 예시---
-flask run 실행 후 http://127.0.0.1:5000/review/llm-ai-codereview/react-sample/2 호출
+flask run 실행 후 
+POST http://127.0.0.1:5000/review
+{
+    "repo_name":"llm-ai-codereview/react-sample",
+    "pr_number":2
+}
+호출
