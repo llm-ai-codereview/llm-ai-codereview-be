@@ -35,7 +35,7 @@ def get_pr_diff(repo_name, pr_number):
     # 리스트를 문자열로 합치기
     return "\n".join(diff_text)
 
-def generate_review(diff_text):
+def generate_review(diff_text, content):
     prompt=(
         "Please answer in Korean.\n"  
         "You are a strict and perfect code reviewer. You cannot tell any lies. \n"   
@@ -59,6 +59,12 @@ def generate_review(diff_text):
 
         "- If there is no review content for each item, exclude that item from the results.\n"  
         "- **IMPORTANT**: NEVER suggest adding comments to the code.\n"  
+        "- Write the review contents area in Korean\n "
+        "- When reviewing, let us know what you tried to change and whether the content was applied well.\n"
+
+        "Below is an explanation of what we wanted to change in this PR:\n"
+
+        f"```content\n{content}"
 
         "Below is the Git diff to review:\n"  
 
@@ -68,7 +74,7 @@ def generate_review(diff_text):
 
         "filePath: the path of the reviewed file\n"  
         "lineNumber: the line number being reviewed\n"  
-        "comment: the detailed review comments formatted as specified above.\n"
+        "comment: the detailed review comments formatted as specified above. \n"
         "Please provide a response in the following JSON format:\n"
         "[{\n"
             "'filePath': 'src/components/ContactForm/index.tsx',\n"
@@ -115,10 +121,11 @@ def post_review_comment(repo_name, pr_number, review_comment):
         commit=commit
         )
 
-def main(repo_name, pr_number):
+def main(repo_name, pr_number, content):
     print("-------- main start -------")
     diff_text = get_pr_diff(repo_name, pr_number)
-    review_comment = generate_review(diff_text)
+    review_comment = generate_review(diff_text, content)
+    print(f"review_comment : {review_comment}")
     if review_comment:
         start_char = "["
         end_char = "]"
@@ -138,9 +145,10 @@ def lambda_handler(event, context):
     action = parsed_body.get('action')
     pr_number = parsed_body.get('pull_request').get('number')
     repo_full_name = parsed_body.get('repository').get('full_name')
+    content = parsed_body.get('pull_request').get('body')
     
-    print(f"action : {action}, pr_number : {pr_number}, repo_full_name : {repo_full_name}")
-    main(repo_full_name, pr_number)
+    print(f"action : {action}, pr_number : {pr_number}, repo_full_name : {repo_full_name}, content : {content}")
+    main(repo_full_name, pr_number, content)
 
 def parse_payload(event):
     content_type = get_content_type(event.get('headers', {}))
