@@ -23,19 +23,25 @@ bedrock_client = boto3.client(
 def get_pr_diff(repo_name, pr_number):
     repo = g.get_repo(repo_name)
     pr = repo.get_pull(pr_number)
+    print("====== get_pr_diff start =======")
+    print(pr)
     
     # diff 텍스트를 저장할 리스트
     diff_text = []
+    entry_text = []
     
     # PR에서 수정된 파일들 가져오기
     files = pr.get_files()
     for file in files:
         diff_text.append(f"File: {file.filename}\n{file.patch}\n")
+        entry_text.append(f"File: {file.filename}\n{repo.get_contents(file.filename, ref=pr.head.ref).decoded_content.decode('utf-8')}\n")
     
     # 리스트를 문자열로 합치기
-    return "\n".join(diff_text)
+    return "\n".join(diff_text),  "\n".join(entry_text)
 
-def generate_review(diff_text, content):
+def generate_review(entry_text, diff_text, content):
+    print("====== generate_review start =======")
+    print(f"entry_text : {entry_text}, diff_text : {diff_text}, content : {content}")
     prompt=(
         "Please answer in Korean.\n"  
         "You are a strict and perfect code reviewer. You cannot tell any lies. \n"   
@@ -45,6 +51,7 @@ def generate_review(diff_text, content):
         "2. **Runtime error check**: Examine the code for potential runtime errors and identify other potential risks.\n"  
         "3. **Optimization**: Inspect the code for optimization points. If the performance is suboptimal, recommend optimized code.\n"  
         "4. **Security issue**: Check if the code uses modules with serious security flaws or contains security vulnerabilities.\n"  
+        "5. **Summary**: Check whether the modified content reflects everything written in the PR.\n"  
 
         "- Write the comment in GitHub Markdown format.\n"  
         "- Present the review comment in the following format:\n"  
@@ -56,15 +63,20 @@ def generate_review(diff_text, content):
         "    review contents\n"  
         "- **Security issue**  \n"  
         "    review contents\n"  
+        "- **Summary** : review contents\n"  
 
         "- If there is no review content for each item, exclude that item from the results.\n"  
         "- **IMPORTANT**: NEVER suggest adding comments to the code.\n"  
         "- Write the review contents area in Korean\n "
         "- When reviewing, let us know what you tried to change and whether the content was applied well.\n"
+        "- You must review the changed parts based on the entry text.\n"
 
-        "Below is an explanation of what we wanted to change in this PR:\n"
+        "Below is description of the changes in the PR.:\n"
 
-        f"```content\n{content}"
+        f"```PR Description : \n{content}\n"
+
+        "Below is the full content of the modified source.:\n"  
+        f"```entry\n{entry_text}\n"
 
         "Below is the Git diff to review:\n"  
 
@@ -79,29 +91,43 @@ def generate_review(diff_text, content):
         "[{\n"
             "'filePath': 'src/components/ContactForm/index.tsx',\n"
             "'lineNumber': 58,\n"
-            "'comment': '- **Pre-condition check**  \\n  The `values.contact` property is not checked for null or undefined before being used. This could lead to a runtime error if `values` is null or undefined.  \\n- **Runtime error check**  \\n  The `handleChange` function is not checked for null or undefined before being called. This could lead to a runtime error if `handleChange` is null or undefined.  \\n- **Optimization**  \\n  No optimization points found.  \\n- **Security issue**  \\n  No security issues found.'\n"
+            "'comment': '- **Pre-condition check**  \\n  The `values.contact` property is not checked for null or undefined before being used. This could lead to a runtime error if `values` is null or undefined.  \\n- **Runtime error check**  \\n  The `handleChange` function is not checked for null or undefined before being called. This could lead to a runtime error if `handleChange` is null or undefined.  \\n- **Optimization**  \\n  No optimization points found.  \\n- **Security issue**  \\n  No security issues found. \\n- **Summary**  \\n  No optimization points found. '\n"
         "},\n"
         "{\n"
             "'filePath': 'src/components/ContactForm/index.tsx',\n"
             "'lineNumber': 58,\n"
-            "'comment': '- **Pre-condition check**  \\n  The `values.contact` property is not checked for null or undefined before being used. This could lead to a runtime error if `values` is null or undefined.  \\n- **Runtime error check**  \\n  The `handleChange` function is not checked for null or undefined before being called. This could lead to a runtime error if `handleChange` is null or undefined.  \\n- **Optimization**  \\n  No optimization points found.  \\n- **Security issue**  \\n  No security issues found.'\n"
+            "'comment': '- **Pre-condition check**  \\n  The `values.contact` property is not checked for null or undefined before being used. This could lead to a runtime error if `values` is null or undefined.  \\n- **Runtime error check**  \\n  The `handleChange` function is not checked for null or undefined before being called. This could lead to a runtime error if `handleChange` is null or undefined.  \\n- **Optimization**  \\n  No optimization points found.  \\n- **Security issue**  \\n  No security issues found. \\n- **Summary**  \\n  No optimization points found. '\n"
         "}]\n"
 
     )
 
-    body = json.dumps({
-        "prompt" : prompt
-    })
+    # body = json.dumps({
+    #     "prompt" : prompt
+    # })
+
+    native_request = {
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 512,
+        "temperature": 0.5,
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": prompt}],
+            }
+        ],
+    }
+
+    request = json.dumps(native_request)
 
     response = bedrock_client.invoke_model(
-        modelId='meta.llama3-70b-instruct-v1:0',
-        body=body
+        modelId='anthropic.claude-3-5-sonnet-20240620-v1:0',
+        body=request
     )
 
     model_response = json.loads(response["body"].read())
 
     # Extract and print the response text.
-    response_text = model_response["generation"]
+    response_text = model_response["content"][0]["text"]
     return response_text
 
 def post_review_comment(repo_name, pr_number, review_comment):
@@ -111,6 +137,7 @@ def post_review_comment(repo_name, pr_number, review_comment):
     commit_sha = pr.head.sha
     commit = repo.get_commit(commit_sha)
     review_data = review_comment.replace("'", '"')
+    print(f"review_data : {review_data}")
     review_data_list = json.loads(review_data)
 
     for review in review_data_list: 
@@ -123,8 +150,8 @@ def post_review_comment(repo_name, pr_number, review_comment):
 
 def main(repo_name, pr_number, content):
     print("-------- main start -------")
-    diff_text = get_pr_diff(repo_name, pr_number)
-    review_comment = generate_review(diff_text, content)
+    diff_text, entry_text = get_pr_diff(repo_name, pr_number)
+    review_comment = generate_review(entry_text, diff_text, content)
     print(f"review_comment : {review_comment}")
     if review_comment:
         start_char = "["
